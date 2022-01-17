@@ -1,0 +1,8 @@
+ftfy
+regex
+tqdm
+omegaconf
+pytorch-lightning
+kornia
+einops
+transformers
