@@ -11,7 +11,8 @@ from torch.nn import functional as F
 from torchvision import transforms
 from torchvision.transforms import functional as TF
 import re
-import datetime
+from datetime import datetime
+
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
