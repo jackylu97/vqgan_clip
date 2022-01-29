@@ -5,7 +5,7 @@ import sys
 
 sys.path.append('./taming-transformers')
 
-from IPython import display
+# from IPython import display
 from omegaconf import OmegaConf
 from PIL import Image
 from taming.models import cond_transformer, vqgan
@@ -14,7 +14,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 from torchvision import transforms
 from torchvision.transforms import functional as TF
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import numpy as np
 import os.path
 from os import path
@@ -36,6 +36,8 @@ from datetime import datetime
 from base64 import b64encode
 
 import warnings
+
+import utils
 
 warnings.filterwarnings('ignore')
 torch.set_printoptions( sci_mode=False )
@@ -561,10 +563,11 @@ class TVLoss(nn.Module):
         y_diff = input[..., 1:, :-1] - input[..., :-1, :-1]
         diff = x_diff**2 + y_diff**2 + 1e-8
         return diff.mean(dim=1).sqrt().mean()
-  torch.cuda.empty_cache()
+
+torch.cuda.empty_cache()
 
 
-  import torch
+import torch
 import math
 
 def rand_perlin_2d(shape, res, fade = lambda t: 6*t**5 - 15*t**4 + 10*t**3):
@@ -651,129 +654,6 @@ def make_rand_init( mode, model, perlin_octaves, perlin_weight, pyramid_octaves,
     return z
 
 
-#@title Set VQGAN Model Save Location
-#@markdown It's a lot faster to load model files from google drive than to download them every time you want to use this notebook.
-save_vqgan_models_to_drive = True #@param {type: 'boolean'}
-download_all = False
-vqgan_path_on_google_drive = "/content/drive/MyDrive/Art/Models/VQGAN/" #@param {type: 'string'}
-vqgan_path_on_google_drive += "/" if not vqgan_path_on_google_drive.endswith('/') else ""
-
-#@markdown Should all the images during the run be saved to google drive?
-save_output_to_drive = True #@param {type:'boolean'}
-output_path_on_google_drive = "/content/drive/MyDrive/Art/" #@param {type: 'string'}
-output_path_on_google_drive += "/" if not output_path_on_google_drive.endswith('/') else ""
-
-#@markdown When saving the images, how much should be included in the name?
-include_full_prompt_in_filename = False #@param {type:'boolean'}
-shortname_limit = 50 #@param {type: 'number'}
-filename_limit = 250
-
-if save_vqgan_models_to_drive or save_output_to_drive:
-    from google.colab import drive
-    drive.mount('/content/drive')
-
-vqgan_model_path = "/content/"
-if save_vqgan_models_to_drive:
-    vqgan_model_path = vqgan_path_on_google_drive
-    !mkdir -p "$vqgan_path_on_google_drive"
-
-save_output_path = "/content/art/"
-if save_output_to_drive:
-    save_output_path = output_path_on_google_drive
-!mkdir -p "$save_output_path"
-
-model_download={
-  "vqgan_imagenet_f16_1024":
-      [["vqgan_imagenet_f16_1024.yaml", "https://heibox.uni-heidelberg.de/d/8088892a516d4e3baf92/files/?p=%2Fconfigs%2Fmodel.yaml&dl=1"],
-      ["vqgan_imagenet_f16_1024.ckpt", "https://heibox.uni-heidelberg.de/d/8088892a516d4e3baf92/files/?p=%2Fckpts%2Flast.ckpt&dl=1"]],
-  "vqgan_imagenet_f16_16384":
-      [["vqgan_imagenet_f16_16384.yaml", "https://heibox.uni-heidelberg.de/d/a7530b09fed84f80a887/files/?p=%2Fconfigs%2Fmodel.yaml&dl=1"],
-      ["vqgan_imagenet_f16_16384.ckpt", "https://heibox.uni-heidelberg.de/d/a7530b09fed84f80a887/files/?p=%2Fckpts%2Flast.ckpt&dl=1"]],
-  "vqgan_openimages_f8_8192":
-      [["vqgan_openimages_f8_8192.yaml", "https://heibox.uni-heidelberg.de/d/2e5662443a6b4307b470/files/?p=%2Fconfigs%2Fmodel.yaml&dl=1"],
-      ["vqgan_openimages_f8_8192.ckpt", "https://heibox.uni-heidelberg.de/d/2e5662443a6b4307b470/files/?p=%2Fckpts%2Flast.ckpt&dl=1"]],
-  "coco":
-      [["coco_first_stage.yaml", "http://batbot.tv/ai/models/VQGAN/coco_first_stage.yaml"],
-      ["coco_first_stage.ckpt", "http://batbot.tv/ai/models/VQGAN/coco_first_stage.ckpt"]],
-  "faceshq":
-      [["faceshq.yaml", "https://drive.google.com/uc?export=download&id=1fHwGx_hnBtC8nsq7hesJvs-Klv-P0gzT"],
-      ["faceshq.ckpt", "https://app.koofr.net/content/links/a04deec9-0c59-4673-8b37-3d696fe63a5d/files/get/last.ckpt?path=%2F2020-11-13T21-41-45_faceshq_transformer%2Fcheckpoints%2Flast.ckpt"]],
-  "wikiart_1024":
-      [["wikiart_1024.yaml", "http://batbot.tv/ai/models/VQGAN/WikiArt_augmented_Steps_7mil_finetuned_1mil.yaml"],
-      ["wikiart_1024.ckpt", "http://batbot.tv/ai/models/VQGAN/WikiArt_augmented_Steps_7mil_finetuned_1mil.ckpt"]],
-  "wikiart_16384":
-      [["wikiart_16384.yaml", "http://eaidata.bmk.sh/data/Wikiart_16384/wikiart_f16_16384_8145600.yaml"],
-      ["wikiart_16384.ckpt", "http://eaidata.bmk.sh/data/Wikiart_16384/wikiart_f16_16384_8145600.ckpt"]],
-  "sflckr":
-      [["sflckr.yaml", "https://heibox.uni-heidelberg.de/d/73487ab6e5314cb5adba/files/?p=%2Fconfigs%2F2020-11-09T13-31-51-project.yaml&dl=1"],
-      ["sflckr.ckpt", "https://heibox.uni-heidelberg.de/d/73487ab6e5314cb5adba/files/?p=%2Fcheckpoints%2Flast.ckpt&dl=1"]],
-  }
-
-loaded_model = None
-loaded_model_name = None
-def dl_vqgan_model(image_model):
-    for curl_opt in model_download[image_model]:
-        modelpath = f'{vqgan_model_path}{curl_opt[0]}'
-        if not path.exists(modelpath):
-            print(f'downloading {modelpath} from {curl_opt[1]}')
-            !curl -L -o {modelpath} '{curl_opt[1]}'
-        else:
-            print(f'found existing {curl_opt[0]}')
-
-def get_vqgan_model(image_model):
-    global loaded_model
-    global loaded_model_name
-    if loaded_model is None or loaded_model_name != image_model:
-        dl_vqgan_model(image_model)
-
-        print(f'loading {image_model} vqgan checkpoint')
-
-
-        vqgan_config= vqgan_model_path + model_download[image_model][0][0]
-        vqgan_checkpoint= vqgan_model_path + model_download[image_model][1][0]
-        print('vqgan_config',vqgan_config)
-        print('vqgan_checkpoint',vqgan_checkpoint)
-
-        model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
-        if image_model == 'vqgan_openimages_f8_8192':
-            model.quantize.e_dim = 256
-            model.quantize.n_e = model.quantize.n_embed
-            model.quantize.embedding = model.quantize.embed
-
-        loaded_model = model
-        loaded_model_name = image_model
-
-    return loaded_model
-
-def slugify(value):
-    value = str(value)
-    value = re.sub(r':([-\d.]+)', ' [\\1]', value)
-    value = re.sub(r'[|]','; ',value)
-    value = re.sub(r'[<>:"/\\|?*]', ' ', value)
-    return value
-
-def get_filename(text, seed, i, ext):
-    if ( not include_full_prompt_in_filename ):
-        text = re.split(r'[|:;]',text, 1)[0][:shortname_limit]
-    text = slugify(text)
-
-    now = datetime.now()
-    t = now.strftime("%y%m%d%H%M")
-    if i is not None:
-        data = f'; r{seed} i{i} {t}{ext}'
-    else:
-        data = f'; r{seed} {t}{ext}'
-
-    return text[:filename_limit-len(data)] + data
-
-def save_output(pil, text, seed, i):
-    fname = get_filename(text,seed,i,'.png')
-    pil.save(save_output_path + fname)
-
-if save_vqgan_models_to_drive and download_all:
-    for model in model_download.keys():
-        dl_vqgan_model(model)
-
 #@title Set Display Rate
 #@markdown If `use_automatic_display_schedule` is enabled, the image will be output frequently at first, and then more spread out as time goes on. Turn this off if you want to specify the display rate yourself.
 use_automatic_display_schedule = True #@param {type:'boolean'}
@@ -854,15 +734,14 @@ save_frequency_for_video = 3  #@param {type:'number'}
 
 output_as_png = True
 
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 print('Using device:', device)
 print('using prompts: ', text_prompt)
 
 clear_memory()
 
-!rm -r steps
-!mkdir -p steps
-
-model = get_vqgan_model( vqgan_model )
+model = utils.get_vqgan_model( vqgan_model )
 
 if clip_model2:
   clip_models = [[clip_model, clip1_weight], [clip_model2, 1. - clip1_weight]]
@@ -917,10 +796,10 @@ losses = []
 mb = master_bar(range(1))
 gnames = ['losses']
 
-mb.names=gnames
-mb.graph_fig, axs = plt.subplots(1, 1) # For custom display
-mb.graph_ax = axs
-mb.graph_out = display.display(mb.graph_fig, display_id=True)
+# mb.names=gnames
+# mb.graph_fig, axs = plt.subplots(1, 1) # For custom display
+# mb.graph_ax = axs
+# mb.graph_out = display.display(mb.graph_fig, display_id=True)
 
 ## optimizer loop
 
@@ -940,10 +819,10 @@ def checkin(i, z, out_pil, losses):
     losses_str = ', '.join(f'{loss.item():g}' for loss in losses)
     tqdm.write(f'i: {i}, loss: {sum(losses).item():g}, losses: {losses_str}')
 
-    display_format='png' if output_as_png else 'jpg'
-    pil_data = image_to_data_url(out_pil, display_format)
+    # display_format='png' if output_as_png else 'jpg'
+    # pil_data = image_to_data_url(out_pil, display_format)
 
-    display.display(display.HTML(f'<img src="{pil_data}" />'))
+    # display.display(display.HTML(f'<img src="{pil_data}" />'))
 
 def should_save_for_video(i):
     return save_frames_for_video and i % save_frequency_for_video
@@ -979,7 +858,7 @@ def train(i):
             if should_checkin(i):
                 checkin(i, z, pil, lossAll)
                 if save_art_output:
-                    save_output(pil, text_prompt, seed, i)
+                    utils.save_output(pil, text_prompt, seed, i)
 
             if should_save_for_video(i):
                 pil.save(f'steps/step{i//save_frequency_for_video:04}.png')

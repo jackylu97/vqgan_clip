@@ -6,3 +6,5 @@ pytorch-lightning
 kornia
 einops
 transformers
+torchvision
+fastprogress

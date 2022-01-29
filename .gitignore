@@ -1,2 +1,6 @@
-CLIP/*
-taming-transformers/*
+CLIP*
+taming-transformers*
+taming*
+models/*
+outputs/*
+__pycache__*
